@@ -247,6 +247,20 @@ QuantumValue VM::callArrayMethod(std::shared_ptr<Array> arr, const std::string &
                 result->push_back(v);
         return QuantumValue(result);
     }
+    if (m == "remove_if")
+    {
+        // C++ std::list::remove_if — in-place removal of matching elements
+        if (args.empty())
+            throw RuntimeError("remove_if() requires a callback");
+        QuantumValue fn = args[0];
+        Array kept;
+        for (auto &v : *arr)
+            if (!callFn(fn, {v}).isTruthy())
+                kept.push_back(v);
+        size_t removed = arr->size() - kept.size();
+        *arr = std::move(kept);
+        return QuantumValue((double)removed);
+    }
     if (m == "reduce")
     {
         if (args.empty())

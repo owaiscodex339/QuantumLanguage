@@ -29,9 +29,11 @@ The build produces **three binaries** with distinct roles:
 
 | Binary             | Role                                                                           |
 | ------------------ | ------------------------------------------------------------------------------ |
-| `quantum.exe`      | Compiles `.sa` → bytecode → bundles into a self-contained `.exe`, then runs it |
-| `qrun.exe`         | Interprets `.sa` directly — no `.exe` is generated                             |
+| `quantum.exe`      | Compiles source → bytecode → bundles into a self-contained `.exe`, then runs it |
+| `qrun.exe`         | Interprets source directly — no `.exe` is generated                            |
 | `quantum_stub.exe` | The bare VM runtime that gets bundled into produced executables                |
+
+Both `quantum` and `qrun` accept `.sa`, `.js`, `.py`, `.c`, and `.cpp` files. Every extension runs **natively on the Quantum VM** through the same multi-syntax front-end — no Node.js, Python, or GCC installation is required. (Non-`.sa` files are supported at the level of Quantum's multi-syntax subset, not the full host language.)
 
 ```bash
 quantum hello.sa     # → hello.exe created, then launched
@@ -426,21 +428,23 @@ luhn_check(n)
 ### `quantum` — compiler + bundler
 
 ```
-quantum <file.sa>           Compile → <file>.exe, then run it
-quantum --run <file.sa>     Interpret directly (no .exe created)
-quantum --check <file.sa>   Parse + type-check only, no execution
-quantum --debug <file.sa>   Dump bytecode disassembly, then run
-quantum --dis   <file.sa>   Dump bytecode disassembly only, then exit
+quantum <file>              Compile → <file>.exe, then run it
+quantum --run <file>        Interpret directly (no .exe created)
+quantum --check <file>      Parse + type-check only, no execution
+quantum --debug <file>      Dump bytecode disassembly, then run
+quantum --dis   <file>      Dump bytecode disassembly only, then exit
 quantum --test  [dir]       Batch-test all .sa files in directory
 quantum --version           Print version string
 quantum --help              Show usage
 quantum --aura              Print achievement board
 ```
 
+`<file>` may be `.sa`, `.js`, `.py`, `.c`, or `.cpp` — all compiled and run by Quantum itself (e.g. `quantum prog.c` produces a standalone `prog.exe` without gcc).
+
 ### `qrun` — direct interpreter
 
 ```
-qrun <file.sa>              Interpret in-place, no .exe produced
+qrun <file>                 Interpret in-place, no .exe produced
 qrun                        Start interactive REPL
 ```
 

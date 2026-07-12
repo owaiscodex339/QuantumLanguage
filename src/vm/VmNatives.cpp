@@ -2035,6 +2035,27 @@ void VM::registerNatives()
 
     globals->define("console", QuantumValue(consoleDict));
 
+    // ── numeric_limits object (C++ compatibility) ─────────────────────────
+    // numeric_limits<T>::max() parses down to numeric_limits.max() — the
+    // template argument is erased, so all specializations share one object.
+    {
+        auto nlDict = std::make_shared<Dict>();
+        auto makeNlMethod = [&](const std::string &name, double value)
+        {
+            auto nat = std::make_shared<QuantumNative>();
+            nat->name = "numeric_limits." + name;
+            nat->fn = [value](std::vector<QuantumValue>) -> QuantumValue
+            { return QuantumValue(value); };
+            (*nlDict)[name] = QuantumValue(nat);
+        };
+        makeNlMethod("max", std::numeric_limits<double>::max());
+        makeNlMethod("min", std::numeric_limits<double>::lowest());
+        makeNlMethod("lowest", std::numeric_limits<double>::lowest());
+        makeNlMethod("epsilon", std::numeric_limits<double>::epsilon());
+        makeNlMethod("infinity", std::numeric_limits<double>::infinity());
+        globals->define("numeric_limits", QuantumValue(nlDict));
+    }
+
     // ── Crypto / Hashing ─────────────────────────────────────────────────
 
     // ---- SHA-256 ----

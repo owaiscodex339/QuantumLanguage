@@ -43,6 +43,7 @@ private:
     ASTNodePtr parseIfStmt();
     ASTNodePtr parseWhileStmt();
     ASTNodePtr parseForStmt();
+    ASTNodePtr parseSwitchStmt(); // C/C++/JS switch — desugared to if-chain
     ASTNodePtr parseReturnStmt();
     ASTNodePtr parsePrintStmt();
     ASTNodePtr parseInputStmt();

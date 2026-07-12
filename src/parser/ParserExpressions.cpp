@@ -404,10 +404,29 @@ ASTNodePtr Parser::parsePostfix()
 
         int ln = current().line; // declared here so it's in scope for all branches below
 
+        // C++ value-initialization: V{} → V()  (only in expression position:
+        // the token after '}' must continue/terminate an expression, so an
+        // empty block after an identifier is never misread as a call)
+        if (check(TokenType::LBRACE) && expr->is<Identifier>() &&
+            pos + 1 < tokens.size() && tokens[pos + 1].type == TokenType::RBRACE &&
+            pos + 2 < tokens.size() &&
+            (tokens[pos + 2].type == TokenType::SEMICOLON ||
+             tokens[pos + 2].type == TokenType::RPAREN ||
+             tokens[pos + 2].type == TokenType::COMMA))
+        {
+            consume(); // eat {
+            consume(); // eat }
+            expr = std::make_unique<ASTNode>(CallExpr{std::move(expr), std::vector<ASTNodePtr>{}}, ln);
+            continue;
+        }
+
         if (!check(TokenType::DOT) && !check(TokenType::ARROW) && !check(TokenType::LBRACKET) && !check(TokenType::LPAREN) && !check(TokenType::PLUS_PLUS) && !check(TokenType::MINUS_MINUS))
         {
             // Handle C++ scope resolution: ClassName::member or ClassName::method(args)
-            if (check(TokenType::COLON) && pos + 1 < tokens.size() && tokens[pos + 1].type == TokenType::COLON)
+            // A number after '::' can never be scope access — leave the colons
+            // alone so Python slices like a[i::2] parse as slices.
+            if (check(TokenType::COLON) && pos + 1 < tokens.size() && tokens[pos + 1].type == TokenType::COLON &&
+                !(pos + 2 < tokens.size() && tokens[pos + 2].type == TokenType::NUMBER))
             {
                 consume(); // eat first :
                 consume(); // eat second :
@@ -454,8 +473,12 @@ ASTNodePtr Parser::parsePostfix()
                     {
                         tdepth -= 2;
                         consume();
-                        ok = (tdepth <= 0);
-                        break;
+                        if (tdepth <= 0)
+                        {
+                            ok = true;
+                            break;
+                        }
+                        continue;
                     }
                     else if (check(TokenType::LPAREN) || check(TokenType::SEMICOLON) || check(TokenType::NEWLINE) || check(TokenType::EOF_TOKEN))
                         break;
@@ -466,6 +489,14 @@ ASTNodePtr Parser::parsePostfix()
                     // It's a template call — parse args and build CallExpr
                     auto args = parseArgList();
                     expr = std::make_unique<ASTNode>(CallExpr{std::move(expr), std::move(args)}, ln);
+                    continue;
+                }
+                if (ok && check(TokenType::COLON) && pos + 1 < tokens.size() &&
+                    tokens[pos + 1].type == TokenType::COLON)
+                {
+                    // Templated type followed by scope access: numeric_limits<T>::max()
+                    // Template args are erased; loop again so the '::' member handler
+                    // above turns this into numeric_limits.max().
                     continue;
                 }
                 // Not a template call — restore position and break

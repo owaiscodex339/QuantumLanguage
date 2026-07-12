@@ -669,6 +669,18 @@ void VM::runFrame(size_t stopDepth)
                 }
             }
 
+            // C++ pair emulation: {a, b}.first / .second → arr[0] / arr[1]
+            if (obj.isArray() && (name == "first" || name == "second"))
+            {
+                auto &a = *obj.asArray();
+                size_t idx = (name == "first") ? 0 : 1;
+                if (idx < a.size())
+                {
+                    push(a[idx]);
+                    break;
+                }
+            }
+
             // Built-in method (array/string/dict methods)
             {
                 auto native = std::make_shared<QuantumNative>();

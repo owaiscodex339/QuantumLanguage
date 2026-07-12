@@ -110,7 +110,54 @@ ASTNodePtr Parser::parsePrimary()
     }
 
     if (tok.type == TokenType::LBRACKET)
+    {
+        // C++ lambda: [captures](params) { body }
+        // Detect by scanning: matching ']' then '(' ... ')' then '{'.
+        // The capture list is discarded — Quantum closures capture automatically.
+        size_t la = pos + 1;
+        int bdepth = 1;
+        while (la < tokens.size() && bdepth > 0)
+        {
+            if (tokens[la].type == TokenType::LBRACKET)
+                bdepth++;
+            else if (tokens[la].type == TokenType::RBRACKET)
+                bdepth--;
+            la++;
+        }
+        if (bdepth == 0 && la < tokens.size() && tokens[la].type == TokenType::LPAREN)
+        {
+            size_t la2 = la + 1;
+            int pdepth = 1;
+            while (la2 < tokens.size() && pdepth > 0)
+            {
+                if (tokens[la2].type == TokenType::LPAREN)
+                    pdepth++;
+                else if (tokens[la2].type == TokenType::RPAREN)
+                    pdepth--;
+                la2++;
+            }
+            while (la2 < tokens.size() && tokens[la2].type == TokenType::NEWLINE)
+                la2++;
+            if (pdepth == 0 && la2 < tokens.size() && tokens[la2].type == TokenType::LBRACE)
+            {
+                int ln2 = tok.line;
+                while (pos < la)
+                    consume(); // discard '[captures]'
+                std::vector<ASTNodePtr> defaultArgs;
+                std::vector<std::string> paramTypes;
+                auto params = parseParamList(nullptr, &defaultArgs, &paramTypes);
+                skipNewlines();
+                auto body = parseBlock();
+                LambdaExpr le;
+                le.params = std::move(params);
+                le.paramTypes = std::move(paramTypes);
+                le.defaultArgs = std::move(defaultArgs);
+                le.body = std::move(body);
+                return std::make_unique<ASTNode>(std::move(le), ln2);
+            }
+        }
         return parseArrayLiteral();
+    }
     if (tok.type == TokenType::LBRACE)
         return parseDictLiteral();
 
@@ -432,17 +479,18 @@ ASTNodePtr Parser::parsePrimary()
         auto name = tok.value;
         consume();
 
+        // Glue C++ scope access into the identifier: Class::member.
+        // Only when '::' is followed by an identifier — otherwise leave the
+        // colons alone so Python slices like a[i::2] still parse.
         while (check(TokenType::COLON))
         {
             size_t la = pos + 1;
-            if (la < tokens.size() && tokens[la].type == TokenType::COLON)
+            if (la + 1 < tokens.size() && tokens[la].type == TokenType::COLON &&
+                tokens[la + 1].type == TokenType::IDENTIFIER)
             {
                 consume(); // colon
                 consume(); // colon
-                if (check(TokenType::IDENTIFIER))
-                {
-                    name += "::" + consume().value;
-                }
+                name += "::" + consume().value;
             }
             else
             {
@@ -462,14 +510,12 @@ ASTNodePtr Parser::parsePrimary()
         while (check(TokenType::COLON))
         {
             size_t la = pos + 1;
-            if (la < tokens.size() && tokens[la].type == TokenType::COLON)
+            if (la + 1 < tokens.size() && tokens[la].type == TokenType::COLON &&
+                tokens[la + 1].type == TokenType::IDENTIFIER)
             {
                 consume(); // colon
                 consume(); // colon
-                if (check(TokenType::IDENTIFIER))
-                {
-                    name += "::" + consume().value;
-                }
+                name += "::" + consume().value;
             }
             else
             {
@@ -583,6 +629,40 @@ ASTNodePtr Parser::parseDictLiteral()
     int ln = current().line;
     expect(TokenType::LBRACE, "Expected '{'");
     skipNewlines();
+
+    // C++ brace-initializer list: {"apple", "banana"}, {1, 2, 3}, or nested
+    // {{"a", x}, {"b", y}} — a literal first element followed by ',' or '}'
+    // (or an immediately nested '{') can't be a dict; parse as an array.
+    bool braceInitList = false;
+    if (check(TokenType::LBRACE))
+        braceInitList = true; // nested init list → array of arrays
+    else if (check(TokenType::STRING) || check(TokenType::NUMBER))
+    {
+        size_t la = pos + 1;
+        while (la < tokens.size() && tokens[la].type == TokenType::NEWLINE)
+            la++;
+        if (la < tokens.size() && (tokens[la].type == TokenType::COMMA ||
+                                   tokens[la].type == TokenType::RBRACE))
+            braceInitList = true;
+    }
+    {
+        if (braceInitList)
+        {
+            ArrayLiteral arr;
+            while (!check(TokenType::RBRACE) && !atEnd())
+            {
+                arr.elements.push_back(parseExpr());
+                skipNewlines();
+                if (!match(TokenType::COMMA))
+                    break;
+                skipNewlines();
+            }
+            skipNewlines();
+            expect(TokenType::RBRACE, "Expected '}'");
+            return std::make_unique<ASTNode>(std::move(arr), ln);
+        }
+    }
+
     DictLiteral dict;
     while (!check(TokenType::RBRACE) && !atEnd())
     {
@@ -844,13 +924,17 @@ std::vector<std::string> Parser::parseParamList(std::vector<bool> *outIsRef, std
                     {
                         tdepth--;
                         la++;
-                        break;
+                        if (tdepth <= 0)
+                            break;
+                        continue;
                     }
                     else if (tokens[la].type == TokenType::RSHIFT)
                     {
                         tdepth -= 2;
                         la++;
-                        break;
+                        if (tdepth <= 0)
+                            break;
+                        continue;
                     }
                     la++;
                 }

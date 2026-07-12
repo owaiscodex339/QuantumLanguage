@@ -429,7 +429,19 @@ std::vector<Token> Lexer::tokenize()
             rawTokens.emplace_back(TokenType::SEMICOLON, ";", startLine, startCol);
             break;
         case ':':
-            rawTokens.emplace_back(TokenType::COLON, ":", startLine, startCol);
+            if (current() == ':' &&
+                !rawTokens.empty() && rawTokens.back().type == TokenType::IDENTIFIER &&
+                rawTokens.back().value == "std")
+            {
+                // C++ scope resolution "std::" — drop the qualifier so
+                // std::cout / std::string lex as plain cout / string.
+                // Only "std" is treated this way: a bare "ident::" must stay
+                // two COLONs so Python slices like a[i::2] keep working.
+                advance();
+                rawTokens.pop_back();
+            }
+            else
+                rawTokens.emplace_back(TokenType::COLON, ":", startLine, startCol);
             break;
         case '.':
             if (current() == '.' && pos + 1 < src.size() && src[pos + 1] == '.')

@@ -51,3 +51,5 @@ test_results.txt
 
 /memory_profile.txt
 /memory_leak_report.txt
+CLAUDE.md
+.claude/
