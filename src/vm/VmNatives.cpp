@@ -2140,6 +2140,15 @@ void VM::registerNatives()
             };
             (*fileObj)["close"] = QuantumValue(closeFn);
 
+            auto readFn = std::make_shared<QuantumNative>();
+            readFn->fn = [stream](std::vector<QuantumValue>) -> QuantumValue
+            {
+                std::string contents{std::istreambuf_iterator<char>(*stream),
+                                     std::istreambuf_iterator<char>()};
+                return QuantumValue(contents);
+            };
+            (*fileObj)["read"] = QuantumValue(readFn);
+
             QuantumValue fileVal(fileObj);
             if (!callback.isNil())
             {
@@ -2150,6 +2159,7 @@ void VM::registerNatives()
             return fileVal;
         };
         (*fileModule)["open"] = QuantumValue(openFn);
+        reg("open", openFn->fn);   // Python bare open()
 
         auto foreachFn = std::make_shared<QuantumNative>();
         foreachFn->name = "File.foreach";
