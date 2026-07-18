@@ -1022,6 +1022,12 @@ void VM::runFrame(size_t stopDepth)
         case Op::ARROW:
         {
             // ptr->member: handled by compileArrow as DEREF + GET_MEMBER
+            QuantumValue val = pop();
+            if (val.isPointer()){
+                push(val.asPointer()->deref());
+            }else{
+                push(val);
+            }
             break;
         }
 
